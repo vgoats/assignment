@@ -152,7 +152,7 @@ Push to this repo. `npm install && npm run dev` must start the demo and API. Inc
 
 We've never sold goat offerings this way before and I think we got ahead of our systems. The idea was beautiful: a customer reserves a real goat now, watches it grow on the farm through the app, and receives that goat on the morning of the festival. People love it. Offerings are ahead of plan. That's the problem.
 
-Vivek ran the first offering sheet by hand before he left. I trusted it. Last night Manju was cross-checking against GoatOS and the live count on the farm and nothing lined up. We have promises against goats that I can't find on the farm. I think — I'm not sure — that a couple of goats got promised to two different customers. And the thing that's keeping me up: I'm worried at least one goat we've already promised to someone isn't actually fit for the festival.
+Vivek ran the first offering sheet by hand before he left. I trusted it. Last night I was cross-checking against GoatOS and the live count on the farm and nothing lined up. We have promises against goats that I can't find on the farm. I think — I'm not sure — that a couple of goats got promised to two different customers. And the thing that's keeping me up: I'm worried at least one goat we've already promised to someone isn't actually fit for the festival.
 
 I keep coming back to one nagging thought: I think the first cut of this just counted how many goats were in a shed and called that "how many offerings we can sell." But people aren't buying *a* goat, they're buying *that* goat — and some of those goats are spoken for, or on medication, or honestly I'm not even sure we've got them identified right. A number on a shed board is not a promise we can keep.
 
