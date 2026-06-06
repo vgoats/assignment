@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Operation Promise Keeper — Offering System</title>
+  <style>
+    :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --ink:#e6e9ef; --mut:#8b93a3; --acc:#4ea1ff; --bad:#ff6b6b; --warn:#ffb454; --ok:#5bd99a; }
+    * { box-sizing:border-box; } body { margin:0; font:14px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    header { padding:18px 24px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:16px; }
+    header h1 { font-size:16px; margin:0; font-weight:650; } header .sub { color:var(--mut); font-size:12px; }
+    nav { display:flex; gap:4px; padding:12px 24px 0; }
+    nav button { background:transparent; color:var(--mut); border:0; border-bottom:2px solid transparent; padding:8px 12px; cursor:pointer; font:inherit; }
+    nav button.active { color:var(--ink); border-bottom-color:var(--acc); }
+    main { padding:20px 24px; display:grid; grid-template-columns:1fr 360px; gap:16px; align-items:start; }
+    main.single { grid-template-columns:1fr; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:var(--mut); font-weight:550; } tbody tr { cursor:pointer; } tbody tr:hover { background:#1d212b; } tbody tr.sel { background:#202636; }
+    .pill { padding:1px 8px; border-radius:999px; font-size:11px; border:1px solid var(--line); }
+    .crit{color:var(--bad);border-color:var(--bad)} .high{color:var(--warn);border-color:var(--warn)} .ok{color:var(--ok);border-color:var(--ok)}
+    .empty { color:var(--mut); padding:28px; text-align:center; } code { color:var(--acc); } pre { white-space:pre-wrap; word-break:break-word; font-size:12px; color:var(--ink); background:#0f1218; border:1px solid var(--line); border-radius:8px; padding:10px; }
+    .hint { color:var(--mut); font-size:12px; margin:0 0 16px; }
+    .aside h3 { margin:0 0 10px; font-size:13px; } .aside .lbl { color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-top:12px; }
+    form.book { display:flex; flex-direction:column; gap:8px; margin-top:6px; } form.book input { background:#0f1218; border:1px solid var(--line); color:var(--ink); border-radius:7px; padding:8px; font:inherit; }
+    form.book button { background:var(--acc); color:#06101f; border:0; border-radius:7px; padding:9px; font:inherit; font-weight:600; cursor:pointer; }
+    .span2 { grid-column:1 / -1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MESHA · Promise Keeper</h1>
+    <span class="sub" id="clock">loading clock…</span>
+  </header>
+  <nav>
+    <button data-tab="inventory" class="active">Available goats</button>
+    <button data-tab="discrepancies">Offering discrepancies</button>
+  </nav>
+  <main id="main">
+    <div class="panel" id="view"><div class="empty">Select a tab.</div></div>
+    <div class="panel aside" id="aside">
+      <p class="hint">This shell calls the engine API. Endpoints return <code>501</code> until you implement them — the wiring (row → detail, booking form) is done so you can spend your time on the truth layer, not plumbing.</p>
+      <div id="detail"><div class="empty">Click a goat to see its verdict, price, and evidence.</div></div>
+      <div class="lbl">Try a booking</div>
+      <form class="book" id="bookform" autocomplete="off">
+        <input id="b_animal" placeholder="canonical goat id (e.g. G-CBE-0001)" />
+        <input id="b_name" placeholder="customer name" />
+        <input id="b_phone" placeholder="customer phone" />
+        <button type="submit">POST /api/book</button>
+      </form>
+      <div id="bookresult"></div>
+    </div>
+  </main>
+  <script>
+    const view = document.getElementById('view');
+    const aside = document.getElementById('aside');
+    const main = document.getElementById('main');
+    const detail = document.getElementById('detail');
+
+    async function clock() {
+      try { const c = await (await fetch('/api/config')).json();
+        document.getElementById('clock').textContent =
+          `today ${c.simulation.now.slice(0,10)} · delivery ${c.simulation.deliveryDate} · min ${c.rules.minWeightKg}kg / ${c.rules.minAgeDays}d`;
+      } catch { document.getElementById('clock').textContent = 'clock unavailable'; }
+    }
+    function sev(s){ const c = s==='critical'?'crit':(s==='high'||s==='medium')?'high':'ok'; return `<span class="pill ${c}">${s}</span>`; }
+
+    async function showDetail(id, rowEl) {
+      document.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('sel'));
+      if (rowEl) rowEl.classList.add('sel');
+      document.getElementById('b_animal').value = id;
+      detail.innerHTML = `<div class="empty">loading ${id}…</div>`;
+      try {
+        const res = await fetch('/api/animals/' + encodeURIComponent(id));
+        const data = await res.json();
+        if (!res.ok) { detail.innerHTML = `<h3>${id}</h3><div class="empty">Engine not implemented:<br><code>${data.error||res.status}</code></div>`; return; }
+        detail.innerHTML = `<h3>${id}</h3>
+          <div class="lbl">Eligibility</div><pre>${JSON.stringify(data.eligibility ?? null, null, 2)}</pre>
+          <div class="lbl">Price</div><pre>${JSON.stringify(data.price ?? null, null, 2)}</pre>`;
+      } catch(e) { detail.innerHTML = `<h3>${id}</h3><div class="empty">request failed: ${e}</div>`; }
+    }
+
+    async function load(tab) {
+      const showAside = tab === 'inventory';
+      aside.style.display = showAside ? '' : 'none';
+      main.classList.toggle('single', !showAside);
+      view.innerHTML = '<div class="empty">loading…</div>';
+      const url = tab === 'inventory' ? '/api/inventory' : '/api/discrepancies';
+      try {
+        const res = await fetch(url); const data = await res.json();
+        if (!res.ok) { view.innerHTML = `<div class="empty">Engine not implemented yet:<br><code>${data.error||res.status}</code></div>`; return; }
+        if (!Array.isArray(data) || data.length===0) { view.innerHTML = '<div class="empty">No rows.</div>'; return; }
+        if (tab === 'inventory') {
+          view.innerHTML = `<table><thead><tr><th>Goat</th><th>Breed</th><th>Eligibility</th><th>Price (₹)</th><th>Identity</th></tr></thead><tbody>${
+            data.map(a=>`<tr data-id="${a.canonicalId??''}"><td><code>${a.canonicalId??''}</code></td><td>${a.breed??''}</td>
+              <td>${a.eligibility?.status??''} ${a.eligibility?.reasons?.length?('· '+a.eligibility.reasons.join('; ')):''}</td>
+              <td>${a.price?.amountInr??'—'}</td><td>${a.identityConfidence??''}</td></tr>`).join('')}</tbody></table>`;
+          view.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=()=>showDetail(tr.dataset.id, tr));
+        } else {
+          view.innerHTML = `<table><thead><tr><th>Severity</th><th>What</th><th>Customer</th><th>Explanation</th></tr></thead><tbody>${
+            data.map(x=>`<tr><td>${sev(x.severity)}</td><td>${x.title??''}<br><span style="color:#8b93a3">${x.entityType} ${x.entityId??''}</span></td>
+              <td>${x.affectedCustomer??'—'}</td><td>${x.explanation??''}</td></tr>`).join('')}</tbody></table>`;
+        }
+      } catch(e) { view.innerHTML = `<div class="empty">request failed: ${e}</div>`; }
+    }
+
+    document.getElementById('bookform').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const body = { canonicalAnimalId: document.getElementById('b_animal').value,
+                     customer: { name: document.getElementById('b_name').value, phone: document.getElementById('b_phone').value } };
+      const out = document.getElementById('bookresult');
+      out.innerHTML = '<div class="empty">booking…</div>';
+      try {
+        const res = await fetch('/api/book', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const data = await res.json();
+        out.innerHTML = `<div class="lbl">Result (${res.status})</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+      } catch(e) { out.innerHTML = `<div class="empty">request failed: ${e}</div>`; }
+    };
+
+    document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+      document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active'); load(b.dataset.tab);
+    });
+    clock(); load('inventory');
+  </script>
+</body>
+</html>

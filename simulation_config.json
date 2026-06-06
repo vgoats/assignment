@@ -1,0 +1,11 @@
+{
+  "festivalId": "FEST-2026-06",
+  "now": "2026-05-27T09:00:00+05:30",
+  "deliveryDate": "2026-06-06",
+  "timezone": "Asia/Kolkata",
+  "_doc": {
+    "now": "Treat THIS as the current moment. Do not read the machine clock anywhere in your engine \u2014 reason from this value so results are reproducible and tests deterministic.",
+    "deliveryDate": "The festival. Goats are fulfilled for customers on this date. It does not move.",
+    "note": "The relationship between 'now' and 'deliveryDate' is the heart of the assignment. Read the founder's brief before deciding what each rule is evaluated against."
+  }
+}

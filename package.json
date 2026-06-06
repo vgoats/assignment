@@ -1,0 +1,29 @@
+{
+  "name": "operation-promise-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server/index.ts",
+    "start": "tsx src/server/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "vitest run -t smoke",
+    "typecheck": "tsc --noEmit",
+    "check:starter": "npm run typecheck && npm run test:smoke",
+    "check": "npm run typecheck && npm run test"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

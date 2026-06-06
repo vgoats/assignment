@@ -1,0 +1,30 @@
+{
+  "festivalId": "FEST-2026-06",
+  "minAgeDays": 365,
+  "minWeightKg": 25,
+  "disallowedStatuses": [
+    "dead",
+    "sold"
+  ],
+  "quarantineDisqualifies": true,
+  "requiresResolvedIdentity": true,
+  "minIdentityConfidenceForSale": "high",
+  "requiresTrustedWeight": true,
+  "withdrawalBlocksDelivery": true,
+  "withdrawalBoundary": "inclusive",
+  "disqualifyingConditions": [
+    "severe_lameness",
+    "blindness",
+    "open_wound",
+    "fever",
+    "respiratory_distress",
+    "broken_horn"
+  ],
+  "_doc": {
+    "purpose": "The festival's fitness rules, provided so you are NOT graded on knowing livestock or religious requirements. You ARE graded on modelling and enforcing them correctly, with evidence, and on handling cases where the data makes a rule hard to evaluate.",
+    "quarantineDisqualifies": "A goat in quarantine cannot be delivered. Quarantine is not permanent \u2014 read the brief: what matters is the state evaluated for the festival, not necessarily the state right now.",
+    "minIdentityConfidenceForSale": "Do not put a goat up for sale unless you can resolve its identity at this confidence. A wrong merge is worse than an unresolved record.",
+    "withdrawalBoundary": "'inclusive' means a goat is blocked when deliveryDate <= eventDate + withdrawalDays (the last day of the window still blocks). Use the per-treatment withdrawal length in the health ledger, not any single number quoted elsewhere.",
+    "disqualifyingConditions": "Active presence of any of these disqualifies. Match against what the health ledger actually records, accounting for resolution."
+  }
+}
