@@ -8,6 +8,6 @@ export default defineConfig({
     // suite never hangs on worker-pool quirks across environments. This is repo
     // ergonomics, not a candidate signal.
     pool: "forks",
-    poolOptions: { forks: { minForks: 1, maxForks: 1 } },
+    fileParallelism: false,
   },
 });

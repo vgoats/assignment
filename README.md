@@ -126,6 +126,8 @@ We are not grading how many bullets you touched. We are grading whether the slic
 
 ## Getting Started
 
+Use Node.js 20.19 or newer.
+
 ```bash
 npm install
 npm run dev            # serves the demo + API on http://localhost:4000
