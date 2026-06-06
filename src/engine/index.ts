@@ -14,37 +14,16 @@
  * Order is not prescribed on purpose.
  */
 import type {
-  AvailableAnimal, BookingResult, Discrepancy, EligibilityVerdict, PriceVerdict,
+  AvailableAnimal, BookingResult, Discrepancy, PriceVerdict,
 } from "../types.js";
 
-/**
- * Resolve the messy source records into a set of canonical PHYSICAL goats.
- *
- * The same goat can appear across systems under different identifiers, and a
- * single reference can be ambiguous. Your resolver must attach a confidence and
- * must NOT silently merge records it cannot confidently match — an unresolved
- * record is safer than a wrong merge. Decide and document your confidence model.
- *
- * Return type is yours to design; the rest of the engine consumes whatever
- * canonical structure you build here.
- */
-export function resolveIdentities(): unknown {
-  throw new Error("Not implemented: resolveIdentities");
-}
-
-/**
- * Compute whether a canonical goat is fit for the festival.
- *
- * Use the rules in festival_rules.json. The verdict must be evaluated for the
- * right moment in time (see the brief — read it carefully on this point), must
- * separate genuinely-ineligible from cannot-yet-be-determined, and must carry
- * evidence pointing at the source records behind every reason.
- *
- * @param canonicalAnimalId an id from your resolved set
- */
-export function computeEligibility(_canonicalAnimalId: string): EligibilityVerdict {
-  throw new Error("Not implemented: computeEligibility");
-}
+export { loadEngineContext } from "./context.js";
+export { resolveIdentities } from "./identity/resolve.js";
+export type { IdentityResolutionResult } from "./identity/resolve.js";
+export type { CanonicalRegistry } from "./registry.js";
+export type { CanonicalAnimal, IdentityConfidence } from "./types.js";
+export { computeEligibility } from "./eligibility/compute.js";
+export { priceAnimal } from "./pricing/price.js";
 
 /**
  * Reconcile the inherited booking sheet against farm reality.
@@ -55,15 +34,6 @@ export function computeEligibility(_canonicalAnimalId: string): EligibilityVerdi
  */
 export function reconcileBookings(): Discrepancy[] {
   throw new Error("Not implemented: reconcileBookings");
-}
-
-/**
- * Value a canonical goat from a TRUSTED weight and the rate effective on the
- * valuation date, with breed premium and festival surge applied. A bad sensor
- * reading must never reach a price. Carry evidence.
- */
-export function priceAnimal(_canonicalAnimalId: string): PriceVerdict {
-  throw new Error("Not implemented: priceAnimal");
 }
 
 /**
