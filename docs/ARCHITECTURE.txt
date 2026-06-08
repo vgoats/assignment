@@ -1,0 +1,307 @@
+ARCHITECTURE — Promise Keeper (take-home)
+How the pieces fit together. Written so someone can extend this without me.
+
+
+SYSTEM OVERVIEW
+---------------
+
+Raw CSV/JSON/JSONL/XML in /data
+        ↓
+  loader.ts (parse only, no business logic)
+        ↓
+  engine/ — all decisions happen here
+        ↓
+  Express API (src/server/index.ts)
+        ↓
+  static demo (public/index.html)
+
+Clock: simulation_config.json only. now = 2026-05-27, delivery = 2026-06-06.
+Never read Date.now() in engine code.
+
+Rough flow for one goat:
+
+  resolveIdentities()  →  CanonicalAnimal in registry
+         ↓
+  computeEligibility() →  EligibilityVerdict (as of delivery date)
+         ↓
+  priceAnimal()        →  PriceVerdict (as of simulation now)
+         ↓
+  listAvailableAnimals / bookAnimal / reconcileBookings / traceFeedExposure
+
+ASCII:
+
+  [goatos] [legacy xml] [bookings] [telemetry] [health] [movements] [feed log]
+                          |
+                    resolveIdentities
+                          |
+                   CanonicalRegistry
+                    /    |     \      \
+            eligibility  price  reconcile  feed trace
+                    \    |     /      /
+                  inventory + booking + replacement
+
+
+IDENTITY / CANONICAL MODEL
+--------------------------
+
+Problem: same physical goat has animal_id, RFID, farm_number, legacy CPT tag, and whatever
+Vivek typed on the sheet.
+
+Approach:
+- Build nodes for every GoatOS row + every legacy CPT row
+- Merge edges only on strong signals:
+    * exact animal_id / legacy_id match
+    * RFID tag matching exactly one GoatOS record (including prior_tags + field-report retag)
+- Do NOT merge on farm_number alone (17 numbers map to multiple goats)
+- Unmerged legacy CPT → own canonical with medium confidence
+
+Output: CanonicalRegistry with lookups by id, tag, farm_number, and resolveRef() for
+booking sheet garbage (e.g. "Boer 150" tries CBE-150 / CPT-150 when unique).
+
+Confidence:
+  high   — GoatOS-backed, tag resolution clean
+  medium — legacy-only or weaker linkage
+  low    — ambiguous (multiple tag matches); not sold
+
+Canonical id = GoatOS animal_id when present, else CPT-OLD-xxxx.
+
+
+ELIGIBILITY
+-----------
+
+Module: src/engine/eligibility/compute.ts
+
+Evaluated for deliveryDate (2026-06-06), not today.
+
+Checks against festival_rules.json + health_ledger:
+  - dead / sold status
+  - min age on delivery
+  - active disqualifying conditions (unresolved)
+  - quarantine still open on delivery
+  - medicine withdrawal: delivery <= treatment_date + withdrawal_days (inclusive)
+
+Every reason carries SourceEvidence pointing at health_event_id or goatos status.
+
+minWeightKg is NOT in eligibility — enforced later at inventory time using trusted
+telemetry weight (see below).
+
+
+PRICING
+-------
+
+Module: src/engine/pricing/
+
+Trusted weight from GoatSense:
+  - reads for goat's RFID tags on or before valuation date (simulation now)
+  - hard drop outside 10–75 kg (catches two-goats-on-scale ~94kg nonsense)
+  - spike filter: drop if > 1.35× median and +12 kg over median
+  - median of up to 15 cleaned reads in last 60 days
+  - fallback: legacy CPT weight (lbs → kg) if no telemetry
+
+Price = weight × mutton_rate × (1 + breed_premium) × (1 + festival_surge)
+Rate from pricing_inputs.csv — latest row where effective_date <= valuation date, matched
+on breed (case insensitive).
+
+Evidence cites telemetry_id + pricing_input_id. Excluded bad reads still show up in
+evidence with interpretedValue: null so auditor can see what we ignored.
+
+
+INVENTORY (what's safe to show now)
+-----------------------------------
+
+Module: src/engine/inventory/
+
+listAvailable.ts — full eligible pool. queryInventory.ts — breed/price filters + pagination
+for GET /api/inventory (default limit 15).
+
+A goat appears in listAvailableAnimals() only if ALL:
+  - identity confidence >= high (per festival rules)
+  - eligibility.status === eligible (delivery day)
+  - NOT feed-exposed-uncleared (traceFeedExposure + no contamination_cleared before delivery)
+  - trusted price computable
+  - trusted weight >= minWeightKg
+  - NOT already assigned (sheet confirmed booking OR runtime booking OR substitute lock)
+
+saleEligibilityBlockReason() in bookable.ts is the shared gate for inventory and bookAnimal.
+
+Currently ~119 of 200 canonical goats pass. The rest are blocked, ineligible, feed-hold,
+already promised, or low identity confidence.
+
+
+BOOKING + CONCURRENCY
+---------------------
+
+Module: src/engine/booking/
+
+assignments.ts — confirmed rows in festival_bookings.csv resolved to canonical ids.
+Those ids are treated as already spoken for (unless reassigned — see replacement).
+
+store.ts — in-memory Map<canonicalId, booking> + per-goat promise chain lock.
+book.ts — withGoatLock → check assigned → check saleEligibilityBlockReason → commit.
+Runtime bookings snapshot trusted weight + price at book time.
+
+listBookings.ts — sheet rows + runtime BK-RUN-xxxx for GET /api/bookings (includes
+trustedWeightKg and weightGapKg when computable).
+
+Refusal returns { ok: false, reason: "..." } with HTTP 409 from API.
+
+Production note: this only works in one Node process. Multi-instance or restart loses
+runtime bookings. Real system would use DB unique constraint on (festival_id, canonical_animal_id)
+or serializable transaction. The lock pattern would become row-level lock or compare-and-swap.
+
+
+RECONCILIATION
+--------------
+
+Module: src/engine/reconcile/
+
+Reads sheet + exchange_listings + field_reports. Emits Discrepancy[] sorted by severity
+then issueId.
+
+weightShortfall.ts — promised_weight vs trusted weight today for confirmed assignments.
+Gap < 2 kg ignored; 2–5 kg medium (DIS-BOOK-WGT-*); > 5 kg high. Skips bookings already
+reassigned to a substitute.
+
+What it catches today (40 from reconcileBookings; feed adds 6 more in UI):
+  - double booking same goat (7) — critical
+  - confirmed booking on delivery-ineligible goat (7) — critical
+  - field report death but GoatOS still active, customer booked (2) — critical
+  - promised weight shortfall vs trusted weight (4 at current thresholds) — high/medium
+  - booking ref unresolved (10) — high/medium
+  - ambiguous ref matches multiple goats (1) — high
+  - active listing for already-booked or ineligible goat (9) — high/medium
+
+Each row has affectedCustomer where applicable + evidence record ids.
+
+Feed exposure discrepancies (6 critical) come from traceFeedExposure(), merged in the UI
+with the same severity sort — not duplicated inside reconcileBookings() itself.
+
+
+FEED CONTAMINATION TRACE
+-----------------------
+
+Module: src/engine/feed/
+
+timeline.ts — index movements; locationAtDate() = last shed on/before a date.
+traceExposure.ts — find contaminated feed_shed_log rows (batch FEED-B-2207, CBE-S04,
+May 3/6/9), walk each canonical goat's movements, mark exposure events, check
+health_ledger contamination_cleared before deliveryDate.
+
+Outputs:
+  - exposures[] per goat (events, clearance, affected bookings)
+  - discrepancies[] for exposed + not cleared + confirmed booking
+  - feedExposureSaleBlockReason() — same exposure/clearance logic blocks inventory/booking
+    for exposed-uncleared goats (cached lookup built from trace)
+
+Evidence cites feed_log_id, movement_event_id, health_event_id.
+
+
+REPLACEMENT / REMEDIATION
+-------------------------
+
+Module: src/engine/replacement/
+
+findSubstitute.ts — scan listAvailableAnimals pool for same breed, trusted weight >=
+promised_weight, exclude original goat id.
+
+enrich.ts — buildReplacementOffersMap() for issue types:
+  DIS-BOOK-INELIG-*, DIS-DEATH-FIELD-*, DIS-FEED-EXP-*, DIS-DOUBLE-* (secondary booking
+  = later booked_on among confirmed rows for that goat).
+
+apply.ts — recordReassignment in memory; uses withGoatLock on substitute id.
+Double-book rule: earliest booking keeps the original goat; later booking gets substitute.
+
+store.ts — Map<bookingId, reassignment>. reconcile uses effectiveAnimalId() so a reassigned
+booking no longer counts as double-booking the original goat.
+
+15 offers in current dataset (6 ineligible, 1 death, 5 double, 3 feed). No offer when
+pool has no matching goat.
+
+
+HISTORY (demo extra)
+--------------------
+
+getAnimalHistory() — telemetry series, health events, breeding ledger (dam/sire/kid).
+Exposed at GET /api/animals/:id/history. UI shows recent weights + lineage when you click
+a goat in inventory.
+
+
+AUDITABILITY
+------------
+
+types.ts defines SourceEvidence: { source, recordId, field?, observedValue, interpretedValue, note }
+
+Used everywhere we derive something:
+  - eligibility reasons
+  - price (including excluded telemetry)
+  - discrepancies
+  - feed exposure
+
+Demo UI renders these in plain English (rate breakdown, excluded scale reads, etc.)
+so you don't have to read raw JSON in an interview.
+
+
+API SURFACE
+-----------
+
+GET  /api/config
+GET  /api/inventory                    → { items, total, page, limit, breeds }
+                                       query: breed, priceMin, priceMax, page, limit (default 15)
+GET  /api/bookings                     → BookingListItem[] (sheet + runtime session bookings)
+GET  /api/discrepancies                → Discrepancy[] (reconcile only; fast)
+GET  /api/discrepancies/replacement-offers → Record<issueId, ReplacementOffer>
+GET  /api/feed-exposure                → { contaminatedBatches, exposures, discrepancies }
+GET  /api/animals/:id                  → { eligibility, price }
+GET  /api/animals/:id/history
+POST /api/book                         → { canonicalAnimalId, customer: { name, phone } }
+POST /api/replacements                 → { issueId } → apply substitute
+
+npm run dev serves UI + API on :4000
+
+UI tabs: Available goats | Bookings | Offering discrepancies.
+Inventory: breed/price filters + 15-row pagination (server-side).
+Bookings + discrepancies: 15-row pagination (client-side); discrepancies also have severity
+filter. Discrepancies tab loads reconcile + offers + feed in parallel, merges feed
+discrepancies into severity-sorted table, feed detail panel below.
+
+
+NOT IMPLEMENTED
+---------------
+
+ingestFieldReports() — still throws in engine/index.ts. Death signals from field_reports
+are partially handled in reconcile/fieldDeaths.ts (regex). General unstructured ingestion
+deferred.
+
+See TRIAGE_NOTE.txt for price audit, persistence, growth projection on shortfalls.
+
+
+EXTENSIBILITY
+-------------
+
+New festival season: swap simulation_config.json + festival_rules.json, reload data files.
+Rules are data-driven (min age, weight, withdrawal boundary, disqualifying conditions list).
+
+New farm/source: add loader + node type in identity resolver, don't fork eligibility logic.
+
+New signal: add a module that returns verdict/discrepancy with SourceEvidence[], wire into
+eligibility (blocks sale), reconcile (flags promised goats), or inventory as appropriate.
+Feed exposure blocks new promises (inventory + book) when exposed and not cleared; reconcile
+still flags existing confirmed bookings on the same goats.
+
+Config already separates clock, rules, and pricing inputs — engine reads via loadEngineContext()
+singleton so we're not reparsing files per request.
+
+
+KNOWN LIMITS
+------------
+
+- Runtime bookings and reassignments not durable across restart
+- Promised-weight shortfall uses trusted weight today only (no growth projection to delivery)
+- No booked_on price audit
+- Field reports partially parsed (death regex only)
+- Legacy-only goats may lack health coverage
+- Reconciliation detects sheet problems; replacement fixes one booking at a time in memory
+- Feed trace assumes movement log is complete; goats with movement gaps may be under-flagged
+
+Tests: npm test — smoke + listAvailableAnimals contract + concurrent booking invariant.
+npm run check — typecheck + full tests (green on submit).

@@ -13,84 +13,32 @@
  *
  * Order is not prescribed on purpose.
  */
-import type {
-  AvailableAnimal, BookingResult, Discrepancy, EligibilityVerdict, PriceVerdict,
-} from "../types.js";
+import type { BookingResult } from "../types.js";
 
-/**
- * Resolve the messy source records into a set of canonical PHYSICAL goats.
- *
- * The same goat can appear across systems under different identifiers, and a
- * single reference can be ambiguous. Your resolver must attach a confidence and
- * must NOT silently merge records it cannot confidently match — an unresolved
- * record is safer than a wrong merge. Decide and document your confidence model.
- *
- * Return type is yours to design; the rest of the engine consumes whatever
- * canonical structure you build here.
- */
-export function resolveIdentities(): unknown {
-  throw new Error("Not implemented: resolveIdentities");
-}
-
-/**
- * Compute whether a canonical goat is fit for the festival.
- *
- * Use the rules in festival_rules.json. The verdict must be evaluated for the
- * right moment in time (see the brief — read it carefully on this point), must
- * separate genuinely-ineligible from cannot-yet-be-determined, and must carry
- * evidence pointing at the source records behind every reason.
- *
- * @param canonicalAnimalId an id from your resolved set
- */
-export function computeEligibility(_canonicalAnimalId: string): EligibilityVerdict {
-  throw new Error("Not implemented: computeEligibility");
-}
-
-/**
- * Reconcile the inherited booking sheet against farm reality.
- *
- * Produce a ranked list of discrepancies (severity reflects company risk), each
- * naming the affected customer where there is one and carrying evidence. The
- * categories are for you to discover from the data, not to be told.
- */
-export function reconcileBookings(): Discrepancy[] {
-  throw new Error("Not implemented: reconcileBookings");
-}
-
-/**
- * Value a canonical goat from a TRUSTED weight and the rate effective on the
- * valuation date, with breed premium and festival surge applied. A bad sensor
- * reading must never reach a price. Carry evidence.
- */
-export function priceAnimal(_canonicalAnimalId: string): PriceVerdict {
-  throw new Error("Not implemented: priceAnimal");
-}
-
-/**
- * The goats that can be safely shown as offerings right now: identity-resolved to
- * the required confidence, eligible for delivery day, trustworthy price, and not
- * already spoken for. Maps your canonical model to the AvailableAnimal contract.
- */
-export function listAvailableAnimals(): AvailableAnimal[] {
-  throw new Error("Not implemented: listAvailableAnimals");
-}
-
-/**
- * Book a specific goat for a customer.
- *
- * THE INVARIANT: a goat can have at most one confirmed booking for the
- * festival. This must hold at the data/system layer, and it must hold when two
- * booking attempts for the same goat arrive at the same instant. Refusals
- * should explain themselves.
- *
- * Implement whatever concurrency strategy you can defend live.
- */
-export async function bookAnimal(
-  _canonicalAnimalId: string,
-  _customer: { name: string; phone: string },
-): Promise<BookingResult> {
-  throw new Error("Not implemented: bookAnimal");
-}
+export { loadEngineContext } from "./context.js";
+export { resolveIdentities } from "./identity/resolve.js";
+export type { IdentityResolutionResult } from "./identity/resolve.js";
+export type { CanonicalRegistry } from "./registry.js";
+export type { CanonicalAnimal, IdentityConfidence } from "./types.js";
+export { computeEligibility } from "./eligibility/compute.js";
+export { priceAnimal } from "./pricing/price.js";
+export { reconcileBookings } from "./reconcile/reconcile.js";
+export { listAvailableAnimals } from "./inventory/listAvailable.js";
+export {
+  queryAvailableInventory,
+  queryAvailableInventoryPage,
+} from "./inventory/queryInventory.js";
+export type { InventoryQuery, InventoryPageResult } from "./inventory/queryInventory.js";
+export { bookAnimal } from "./booking/book.js";
+export { listBookings } from "./booking/listBookings.js";
+export { getAnimalHistory } from "./history/getHistory.js";
+export type { AnimalHistory } from "./history/getHistory.js";
+export { findSubstituteForBooking } from "./replacement/findSubstitute.js";
+export type { SubstituteCandidate } from "./replacement/findSubstitute.js";
+export { applyReplacement } from "./replacement/apply.js";
+export { getReplacementOffers } from "./replacement/enrich.js";
+export { traceFeedExposure } from "./feed/traceExposure.js";
+export type { FeedExposureTraceResult } from "../types.js";
 
 /**
  * Additional surfaces you may choose to expose.
@@ -101,11 +49,14 @@ export async function bookAnimal(
  * chose to expose, defer, or leave manual in your Triage Note. Signatures are
  * suggestions; design as you see fit.
  */
-export function findSubstitute(_failedBookingId: string): unknown {
-  throw new Error("Not implemented: findSubstitute");
-}
-export function traceFeedExposure(): unknown {
-  throw new Error("Not implemented: traceFeedExposure");
+import { loadEngineContext } from "./context.js";
+import { resolveIdentities } from "./identity/resolve.js";
+import { findSubstituteForBooking as findSubstituteForBookingImpl } from "./replacement/findSubstitute.js";
+
+export function findSubstitute(failedBookingId: string) {
+  const ctx = loadEngineContext();
+  const { registry } = resolveIdentities(ctx);
+  return findSubstituteForBookingImpl(failedBookingId, ctx, registry);
 }
 export function ingestFieldReports(): unknown {
   throw new Error("Not implemented: ingestFieldReports");

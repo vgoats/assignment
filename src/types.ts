@@ -167,6 +167,14 @@ export interface EligibilityVerdict {
 
 export type Severity = "critical" | "high" | "medium" | "low";
 
+export interface ReplacementOffer {
+  targetBookingId: string;
+  substituteCanonicalId: string;
+  breed: string;
+  trustedWeightKg: number;
+  promisedWeightKg: number;
+}
+
 export interface Discrepancy {
   issueId: string;
   severity: Severity;
@@ -177,6 +185,15 @@ export interface Discrepancy {
   affectedCustomer?: string;
   suggestedAction?: string;
   evidence: SourceEvidence[];
+  replacementOffer?: ReplacementOffer;
+}
+
+export interface ReplacementResult {
+  ok: boolean;
+  bookingId?: string;
+  substituteCanonicalId?: string;
+  originalCanonicalId?: string;
+  reason?: string;
 }
 
 export interface PriceVerdict {
@@ -201,4 +218,65 @@ export interface BookingResult {
   ok: boolean;
   bookingId?: string;
   reason?: string;         // why it was refused, if ok === false
+}
+
+export interface BookingListItem {
+  bookingId: string;
+  customerName: string;
+  customerPhone: string;
+  animalRef: string;
+  canonicalAnimalId: string | null;
+  assignedCanonicalId: string | null;
+  bookedOn: string;
+  promisedWeightKg: number | null;
+  priceQuotedInr: number | null;
+  status: string;
+  notes: string;
+  source: "sheet" | "runtime";
+  hasSubstitute: boolean;
+  trustedWeightKg: number | null;
+  weightGapKg: number | null;
+}
+
+export interface FeedExposureEvent {
+  logDate: string;
+  farm: string;
+  shed: string;
+  feedBatchId: string;
+  feedLogId: string;
+  movementEventId?: string;
+}
+
+export interface FeedClearanceRecord {
+  healthEventId: string;
+  clearedOn: string;
+}
+
+export interface AffectedBookingRef {
+  bookingId: string;
+  customerName: string;
+}
+
+export interface FeedExposureRecord {
+  canonicalId: string;
+  exposed: boolean;
+  clearedForDelivery: boolean;
+  exposureEvents: FeedExposureEvent[];
+  clearance?: FeedClearanceRecord;
+  affectedBookings?: AffectedBookingRef[];
+  evidence: SourceEvidence[];
+}
+
+export interface ContaminatedFeedBatch {
+  feedLogId: string;
+  logDate: string;
+  farm: string;
+  shed: string;
+  feedBatchId: string;
+}
+
+export interface FeedExposureTraceResult {
+  contaminatedBatches: ContaminatedFeedBatch[];
+  exposures: FeedExposureRecord[];
+  discrepancies: Discrepancy[];
 }
